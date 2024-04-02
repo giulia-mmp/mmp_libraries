@@ -18,6 +18,6 @@ setuptools.setup(
     url='https://github.com/giulia-mmp/mmp_libraries',
     install_requires=['requests'],
     
-    #download_url="https://github.com/giulia-mmp/mmp_theme/archive/refs/tags/v2.0.2.tar.gz"
+    download_url="https://github.com/giulia-mmp/mmp_libraries/archive/refs/tags/v1.0.0.tar.gz"
     
 )
