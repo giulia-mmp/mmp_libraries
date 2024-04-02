@@ -1,1 +1,0 @@
-from .TCShielding import ShieldingGamma
