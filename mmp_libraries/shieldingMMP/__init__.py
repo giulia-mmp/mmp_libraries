@@ -1,1 +1,1 @@
-from .TCShielding import ShieldingGamma
+from .shieldingMMP import ShieldingGamma
