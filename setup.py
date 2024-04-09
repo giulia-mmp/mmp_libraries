@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name='mmp_libraries',
-    version='1.0.2',
+    version='1.1.0',
     packages=setuptools.find_packages(),  #['mmp_libraries'], #, 'oct2pyMMP', 'shieldingMMP'],  # 
     license='MIT',
     description='Custom libraries and utilities for MMP',
@@ -18,6 +18,6 @@ setuptools.setup(
     url='https://github.com/giulia-mmp/mmp_libraries',
     install_requires=['requests'],
     
-    download_url="https://github.com/giulia-mmp/mmp_libraries/archive/refs/tags/v1.0.2.tar.gz"
+    download_url="https://github.com/giulia-mmp/mmp_libraries/archive/refs/tags/v1.1.0.tar.gz"
     
 )
