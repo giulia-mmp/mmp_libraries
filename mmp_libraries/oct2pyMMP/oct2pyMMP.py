@@ -30,7 +30,7 @@ def read_sss_detdep(*filenames):
                 if key == 'NAMES':
                     row_values = [s.strip() for s in
                                   re.findall(r"'(.*?)'", values.strip())]  # re.findall(r"'(.*?)'", values.strip())
-                    output[key] = np.array([row_values]).reshape(-1,)  # , dtype='U')
+                    output[key] = np.array([row_values]).reshape(-1, )  # , dtype='U')
                 else:
                     row_values = re.split(r'%\s*\w+\n|\n', values.strip())  # values.strip().split('\n')
 
@@ -57,7 +57,6 @@ def read_sss_detdep(*filenames):
 
 # FNC: Function which reads _res.m Serpent files
 def read_sss_res(filename, *search_strings):
-
     if not search_strings:  # If search_strings is None, gather all unique entries in file
         search_strings = set()
         # unique_strings = set()
@@ -129,27 +128,26 @@ def read_out_file(fn):
         if 'Material "' in line:
             # print(ii, line)
             mat = line.split('"')[1]
-            dict_mat[mat] = {
-                'adens': float(lines_out[ii + 5].split(' ')[-2]),
-                'mdens': float(lines_out[ii + 6].split(' ')[-2]),
-                'vol': float(lines_out[ii + 7].split(' ')[-2]),
-                'n_nuc': int(lines_out[ii + 11].split(' ')[2])
-            }
-            # counter = 0
-            # ii_c = ii+20
-            # while '-' in lines_out[ii_c]:
-            #    print(lines_out[ii_c])
-            #    ii_c += 1
-            #    counter += 1
-            # counter -= 2
-            # print(counter)
-            # dict_mat[mat]['n_nuc'] = counter
-
-            df_tmp = pd.read_table(fn , sep='\s+', skiprows=ii + 20,    # + '.out'
+            try:
+                dict_mat[mat] = {
+                    'adens': float(lines_out[ii + 5].split(' ')[-2]),
+                    'mdens': float(lines_out[ii + 6].split(' ')[-2]),
+                    'vol': float(lines_out[ii + 7].split(' ')[-2]),
+                    'n_nuc': int(lines_out[ii + 11].split(' ')[2])
+                }
+            except ValueError:
+                print('row ', ii)
+            df_tmp = pd.read_table(fn,
+                                   sep='\s+',
+                                   skiprows=ii + 20,
                                    # nrows=counter,
                                    nrows=dict_mat[mat]['n_nuc'],
                                    names=['Nuclide', 'aweight', 'temp', 'adens', 'afrac', 'mfrac'],
-                                   index_col=0)
+                                   #  index_col=False,
+                                   index_col=0,
+                                   usecols=[0, 1, 2, 3, 4, 5],
+                                   #  converters={'mfrac': lambda x: re.sub(r'\D+', '', x)}
+                                   )
             df_tmp.index = [nn.split('.')[0] for nn in list(df_tmp.index)]
             dict_mat[mat]['comp'] = df_tmp
 
