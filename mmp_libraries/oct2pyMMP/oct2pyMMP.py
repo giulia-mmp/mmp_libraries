@@ -152,3 +152,16 @@ def read_out_file(fn):
             dict_mat[mat]['comp'] = df_tmp
 
     return lines_out, dict_mat
+
+# FNC: Function to read .mvol Serpent files
+def read_sss_mvol(fn):
+    output = {}
+    with open(fn, 'r') as file:
+        lines = file.readlines()[7:]  # Skip the first 7 lines
+        for line in lines:
+            split_line = line.split()
+            material_name = split_line[0]
+            material_volume = float(split_line[2])
+            output[material_name] = material_volume
+    return output
+
