@@ -10,7 +10,7 @@ import scipy as sc
 from copy import deepcopy
 from collections import defaultdict
 import os
-import math
+
 
 
 
@@ -22,9 +22,8 @@ class ShieldingGamma:
   def __init__(self,
                reactor_materials,
                source_params,
-               geometry,
                mode,
-               source_folder,
+               source_folder=None,
                nist_folder='NIST_att_coeff/'):
     """
     Class initialization
@@ -36,9 +35,6 @@ class ShieldingGamma:
     self.nist_names_map = {
         'Water':        'Water',
         'Air':          'Air',
-        'Oxygen':       'O',
-        'Nitrogen':     'N',
-        'Potassium':    'K',
         'Beryllium':    'Be',
         'Boron':        'B',
         'Carbon':       'C',
@@ -55,16 +51,16 @@ class ShieldingGamma:
 	'Concrete':	'Concrete',
 	'Polyethylene':	'Polyethylene'
     }
-    self.geometry = geometry
+
     self.mode = mode
     
     self.nist_folder = nist_folder
     self.reactor_materials = reactor_materials
-    self.core_rho = 0
+
     self.materials_db = self.__materials_load_process__()
 
     if (source_folder is None) and (mode == 'full_analytic'):
-      raise AttributeError('source_folder is required in full analytic mode')
+      raise InputError('source_folder is required in full analytic mode')
     else:
       self.source_folder = source_folder
     self.source_db = source_params
@@ -74,10 +70,8 @@ class ShieldingGamma:
       _ = self.source_initialization_full_analytic()
     elif self.mode == 'serpent_based':
       _ = self.source_initialization_serpent_based()
-    elif self.mode == 'third_mode':
-      _ = self.source_initialization_third_mode()
     else:
-      raise AttributeError("mode must be either 'full_analytic', 'serpent_based' or 'third_mode'")
+      raise AttributeError("mode must be either 'full_analytic' or 'serpent_based'")
 
     _ = self.mu_rho_initialization()
 
@@ -114,15 +108,6 @@ class ShieldingGamma:
         self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'])
 
       self.core_rho = self.reactor_materials['salt_core']['rho'] * salt_core + self.reactor_materials['graphite_core']['rho'] * graphite_core
-    elif self.mode == 'third_mode':
-      i = 0
-      vol_tot = 0
-      for mat in self.reactor_materials.keys():
-        if 'core' in self.reactor_materials[mat].keys():
-          vol_tot += self.reactor_materials[mat]['vol']
-      for mat in self.reactor_materials.keys():
-        if 'core' in self.reactor_materials[mat].keys():
-          self.core_rho += self.reactor_materials[mat]['rho'] * self.reactor_materials[mat]['vol']/vol_tot
 
     for elem in self.reactor_materials.keys():
       for ee, cc in enumerate(self.reactor_materials[elem]['components'].keys()):
@@ -134,27 +119,7 @@ class ShieldingGamma:
     
     if self.mode == 'full_analytic':
       nist_db['core'] = salt_core * nist_db['salt_core'] + graphite_core * nist_db['C']
-    elif self.mode == 'third_mode':
-      nist_db['core'] = pd.read_csv(
-        self.nist_folder + 'Air.csv',
-        index_col=0,
-      )
-
-      nist_db['core'].loc[:, :] = 0
-      e_scale = nist_db['core'].index.values
-      for mat in self.reactor_materials.keys():
-        if 'core' in self.reactor_materials[mat].keys():
-          # in order to sum nist_db of different materials they are all interpolated on a single unified energy axis
-          # taken from the air data
-          nist_interp_mu = sc.interpolate.interp1d(nist_db[mat].index.values, nist_db[mat]['mu_rho (cm2/g)'])
-          nist_interp_mut = sc.interpolate.interp1d(nist_db[mat].index.values, nist_db[mat]['mut_rho (cm2/g)'])
-
-          nist_interp = np.zeros([len(e_scale), 2])
-          nist_interp[:, 0] = nist_interp_mu(e_scale).reshape(-1)
-          nist_interp[:, 1] = nist_interp_mut(e_scale).reshape(-1)
-          # core homogenization by weighing each nist_db on the volume fraction
-          nist_db['core'] += nist_interp * self.reactor_materials[mat]['vol']/vol_tot
-
+    
     return nist_db
 
 
@@ -223,10 +188,6 @@ class ShieldingGamma:
     self.energy_binning = df_source.index.values
     self.spatial_binning = df_bessel.index.values
 
-    '''gamma_spectrum = pd.DataFrame(columns = ['Gamma Source'], index=self.energy_binning)
-    gamma_spectrum['Gamma Source'] = self.gamma_source.sum(axis=0)
-    gamma_spectrum.to_csv('U235_gamma_emission.csv')'''
-
     return
 
 
@@ -248,51 +209,6 @@ class ShieldingGamma:
     
     return
 
-  def source_initialization_third_mode(self):
-    fname = self.source_folder + self.source_db['source_name']
-    df_load_s = pd.read_csv(
-      fname,
-      index_col=0,
-      sep=','
-    )
-
-    df_source = pd.DataFrame(index=df_load_s.index, )
-    #de = np.append(0, df_load_s.index.values[1:] - df_load_s.index.values[0:-1])
-    df_source['Gamma Spectrum'] = df_load_s['Gamma Source']/sum(df_load_s['Gamma Source'])*self.source_db['gamma_rate']
-
-    # Save in self
-    df_source.values.reshape(1, -1)
-    self.spatial_binning = np.arange(0, self.source_db['spatial_binning_n'], dtype=float)
-    dv = self.source_db['core_vol'] / self.source_db['spatial_binning_n']
-    if self.geometry == 'sphere':
-      r = (3 / 4 / np.pi * dv) ** (1 / 3)
-      for i in range(0, self.source_db['spatial_binning_n']):
-        self.spatial_binning[i] = r
-        r = (3 / 4 / np.pi * dv + r ** 3) ** (1 / 3)
-      self.energy_binning = df_source.index.values
-      self.gamma_source = np.zeros([len(self.spatial_binning), len(self.energy_binning)])
-
-      for i in range(0, self.source_db['spatial_binning_n']):
-          self.gamma_source[i, :] = df_source.values.reshape(1, -1) / self.source_db['spatial_binning_n']
-    else:
-      r = (dv/self.source_db['H_core']/np.pi) ** (1/2)
-      for i in range(0, self.source_db['spatial_binning_n']):
-        self.spatial_binning[i] = r
-        r = (dv/self.source_db['H_core']/np.pi + r ** 2) ** (1/2)
-      self.energy_binning = df_source.index.values
-      self.gamma_source = np.zeros([len(self.spatial_binning), len(self.energy_binning)])
-
-      for i in range(0, self.source_db['spatial_binning_n']):
-        self.gamma_source[i, :] = df_source.values.reshape(1, -1) / self.source_db['spatial_binning_n']
-    #fig = go.Figure()
-    #fig.add_trace(
-    #  go.Scatter(x=df_load_s.index.values, y=self.gamma_source[0, :],
-    #             line=dict(color='black', dash='solid', width=3.5), mode='lines')
-    #)
-    #fig.update_layout(title='', xaxis=dict(title='energy (MeV)'), yaxis=dict(title='Activity (Bq)'))
-    #fig.show()
-
-    return
 
   def mu_rho_initialization(self):
 
@@ -302,13 +218,13 @@ class ShieldingGamma:
       if method == 'log':
         df_ref_new = np.log(df_ref.reset_index()).set_index(idx_name)
         energy_new = np.log(energy)
-      elif method == 'linear':
+      elif method =='linear':
         df_ref_new = df_ref.copy()
         energy_new = energy.copy()
       values = pd.concat([df_ref_new, pd.DataFrame(index=np.array(energy_new))]).sort_index().interpolate(method='index').loc[energy_new].reset_index()
       if method == 'log':
         res = np.exp(values).set_index('index')
-      elif method == 'linear':
+      elif method =='linear':
         res = values.set_index('index')
       return res
 
@@ -317,7 +233,7 @@ class ShieldingGamma:
     for elem in list(self.reactor_materials.keys()):
       mu_rho_db[elem] = mu_rho(self.energy_binning, self.materials_db[elem])['mu_rho (cm2/g)'].values
     mut_rho_db['Air'] = mu_rho(self.energy_binning, self.materials_db['Air'])['mut_rho (cm2/g)'].values
-    if self.mode == 'full_analytic' or self.mode == 'third_mode':
+    if self.mode == 'full_analytic':
       mu_rho_db['core'] = mu_rho(self.energy_binning, self.materials_db['core'])['mu_rho (cm2/g)'].values
 
     # Save in self
@@ -337,33 +253,24 @@ class ShieldingGamma:
 
     # Update materials dictionary
     case_materials_db = deepcopy(self.reactor_materials)
-    self.__merge_nested_dicts__(case_materials_db, case_geom)  #######
+    self.__merge_nested_dicts__(case_materials_db, case_geom)
 
     # Calculate mat_dose
     for eni, en in enumerate(self.energy_binning):
 
       materials_att = 0
-      for mr in self.reactor_materials.keys():
-        if 'core' not in self.reactor_materials[mr].keys() and self.mode == 'third_mode':
-            materials_att += self.mu_rho_db[mr][eni] * case_materials_db[mr]['rho'] * case_materials_db[mr]['thickness']
-      if math.isnan(materials_att):
-        materials_att = 0
+      for mr in self.mu_rho_db.keys():
+        if mr not in ['salt_core', 'graphite_core', 'core', 'Air']:
+          materials_att += self.mu_rho_db[mr][eni] * case_materials_db[mr]['rho'] * case_materials_db[mr]['thickness']
 
-      for ri, r in enumerate(self.spatial_binning):
-        if self.mode == 'serpent_based':
-          core_att = 0
-        else:
+      for ri, r in enumerate(self.spatial_binning):    
+        if self.mode == 'full_analytic':
           core_att = self.mu_rho_db['core'][eni] * self.core_rho * (self.source_db['R_core'] - r)
+        elif self.mode == 'serpent_based':
+          core_att = 0
         exponent = - (core_att + materials_att)
-        if self.geometry == 'sphere':
-          mat_dose[ri, eni] = self.fluence_to_Gy_hr * self.gamma_source[ri, eni] * en * np.exp(exponent) / \
-          (4 * np.pi * target_distance**2) * self.mut_rho_db['Air'][eni]
-        else:
-          #if self.gamma_source[ri, eni] != 0:
-          #print('ciao')
-          mat_dose[ri, eni] = self.fluence_to_Gy_hr * self.gamma_source[ri, eni] * en * np.exp(exponent)/ \
-          (2 * np.pi * (target_distance * self.source_db['H_core'])) * self.mut_rho_db['Air'][eni]
-
+        mat_dose[ri, eni] = self.fluence_to_Gy_hr * self.gamma_source[ri, eni] * en * np.exp(exponent) / \
+         (4 * np.pi * (target_distance - r)**2) * self.mut_rho_db['Air'][eni]
 
     df_dose = pd.DataFrame(index=self.spatial_binning, data=mat_dose, columns=self.energy_binning)
     self.df_dose = df_dose
@@ -371,5 +278,4 @@ class ShieldingGamma:
     tot_dose = df_dose.sum().sum()#*1e6
     self.tot_dose = tot_dose
 
-
-    return self.tot_dose  #in Gy/h
+    return self.tot_dose
