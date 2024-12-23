@@ -88,8 +88,8 @@ class ShieldingGamma:
     nist_dict = defaultdict(pd.DataFrame)
     for nist_file in os.listdir(self.nist_folder):
       tmp_nist = pd.read_csv(
-          f'{self.nist_folder}/{nist_file}',
-          index_col=0
+        f'{self.nist_folder}/{nist_file}',
+        index_col=0
       )
       nist_dict[self.nist_names_map[nist_file[:-4]]] = tmp_nist
     return nist_dict
@@ -106,14 +106,15 @@ class ShieldingGamma:
     # Process custom materials and elements
     if self.mode == 'full_analytic':
       salt_core = self.reactor_materials['salt_core']['rho'] * self.reactor_materials['salt_core']['vol'] / \
-      (self.reactor_materials['salt_core']['rho'] * self.reactor_materials['salt_core']['vol'] + \
-        self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'])
+                  (self.reactor_materials['salt_core']['rho'] * self.reactor_materials['salt_core']['vol'] + \
+                   self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'])
 
       graphite_core = self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'] / \
-      (self.reactor_materials['salt_core']['rho'] * self.reactor_materials['salt_core']['vol'] + \
-        self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'])
+                      (self.reactor_materials['salt_core']['rho'] * self.reactor_materials['salt_core']['vol'] + \
+                       self.reactor_materials['graphite_core']['rho'] * self.reactor_materials['graphite_core']['vol'])
 
-      self.core_rho = self.reactor_materials['salt_core']['rho'] * salt_core + self.reactor_materials['graphite_core']['rho'] * graphite_core
+      self.core_rho = self.reactor_materials['salt_core']['rho'] * salt_core + self.reactor_materials['graphite_core'][
+        'rho'] * graphite_core
     elif self.mode == 'third_mode':
       i = 0
       vol_tot = 0
@@ -130,8 +131,9 @@ class ShieldingGamma:
           fillv = 0
         else:
           fillv = None
-        nist_db[elem] = nist_db[elem].add(self.reactor_materials[elem]['components'][cc] * nist_db[cc], fill_value=fillv).dropna()
-    
+        nist_db[elem] = nist_db[elem].add(self.reactor_materials[elem]['components'][cc] * nist_db[cc],
+                                          fill_value=fillv).dropna()
+
     if self.mode == 'full_analytic':
       nist_db['core'] = salt_core * nist_db['salt_core'] + graphite_core * nist_db['C']
     elif self.mode == 'third_mode':
@@ -157,14 +159,12 @@ class ShieldingGamma:
 
     return nist_db
 
-
-
   def __merge_nested_dicts__(self, d1, d2):
     for key, value in d2.items():
       if key in d1 and isinstance(d1[key], dict) and isinstance(value, dict):
-          self.__merge_nested_dicts__(d1[key], value)
+        self.__merge_nested_dicts__(d1[key], value)
       else:
-          d1[key] = value
+        d1[key] = value
 
 
 
@@ -172,9 +172,9 @@ class ShieldingGamma:
   def source_initialization_full_analytic(self):
     fname = self.source_db['fissile_material'] + '_gamma_spectrum.csv'
     df_load_s = pd.read_csv(
-        f'{self.source_folder}/{fname}',
-        index_col=0,
-        sep=';'
+      f'{self.source_folder}/{fname}',
+      index_col=0,
+      sep=';'
     )
 
     if self.source_db['energy_res'] > 0:
@@ -182,7 +182,7 @@ class ShieldingGamma:
       df_source['Energy'] = np.linspace(df_load_s.index[0], df_load_s.index[-1], int(self.source_db['energy_res']))
       df_source['Energy Pdf'] = np.interp(df_source['Energy'], df_load_s.index, df_load_s['Gamma Fraction'])
       deltaE = df_source['Energy'].diff().iloc[-1]
-      df_source['Gamma Spectrum'] = df_source['Energy Pdf']*deltaE
+      df_source['Gamma Spectrum'] = df_source['Energy Pdf'] * deltaE
       df_source['Energy upper'] = df_source['Energy'] / 1e6
       df_source['Energy lower'] = df_source['Energy'].shift(1) / 1e6
       df_source['Energy bin'] = df_source[['Energy lower', 'Energy upper']].mean(axis=1)
@@ -195,17 +195,18 @@ class ShieldingGamma:
 
     rv1 = self.source_db['spatial_res']
     rv2 = int(self.source_db['R_core'] + 1)
-    drv = int(self.source_db['R_core']/self.source_db['spatial_res'] + 1)
+    drv = int(self.source_db['R_core'] / self.source_db['spatial_res'] + 1)
     semi_res = self.source_db['spatial_res'] / 2
     dr = np.linspace(rv1, rv2, drv) - semi_res
 
     df_bessel = pd.DataFrame(index=dr)
-    norm_pow_dens = sc.special.jv(0, 2.4048*dr/(self.source_db['R_core']+self.source_db['extrap_r']))
-    vol = 4/3*np.pi*((dr + semi_res)**3 - (dr - semi_res)**3)
+    norm_pow_dens = sc.special.jv(0, 2.4048 * dr / (self.source_db['R_core'] + self.source_db['extrap_r']))
+    vol = 4 / 3 * np.pi * ((dr + semi_res) ** 3 - (dr - semi_res) ** 3)
     df_bessel['Norm Power'] = vol * norm_pow_dens
 
     gamma_source = np.outer(df_bessel['Norm Power'], df_source['Gamma Spectrum'])
-    gamma_source = gamma_source / np.sum(gamma_source)*self.source_db['fission_rate']*self.source_db['photon_multiplicity']
+    gamma_source = gamma_source / np.sum(gamma_source) * self.source_db['fission_rate'] * self.source_db[
+      'photon_multiplicity']
 
     # if plot_flag:           #FIXME togliere i plot da qui, fare funzione specifica
     #   fig1 = mmp.mmp_plot(data=df_bessel, kind='line',
@@ -223,10 +224,6 @@ class ShieldingGamma:
     self.energy_binning = df_source.index.values
     self.spatial_binning = df_bessel.index.values
 
-    '''gamma_spectrum = pd.DataFrame(columns = ['Gamma Source'], index=self.energy_binning)
-    gamma_spectrum['Gamma Source'] = self.gamma_source.sum(axis=0)
-    gamma_spectrum.to_csv('U235_gamma_emission.csv')'''
-
     return
 
 
@@ -240,12 +237,12 @@ class ShieldingGamma:
 
     df_source = pd.DataFrame(index=df_load_s.index)
     df_source['Gamma Spectrum'] = df_load_s['Gamma Source']
-    
+
     # Save in self
     self.gamma_source = df_source.values.reshape(1,-1)
     self.energy_binning = df_source.index.values
     self.spatial_binning = [self.source_db['source_radius']]
-    
+
     return
 
   def source_initialization_third_mode(self):
@@ -360,10 +357,8 @@ class ShieldingGamma:
         exponent = - (core_att + materials_att)
         if self.geometry == 'sphere':
           mat_dose[ri, eni] = self.fluence_to_Gy_hr * self.gamma_source[ri, eni] * en * np.exp(exponent) / \
-          (4 * np.pi * target_distance**2) * self.mut_rho_db['Air'][eni]
+                              (4 * np.pi * target_distance ** 2) * self.mut_rho_db['Air'][eni]
         else:
-          #if self.gamma_source[ri, eni] != 0:
-          #print('ciao')
           mat_dose[ri, eni] = self.fluence_to_Gy_hr * self.gamma_source[ri, eni] * en * np.exp(exponent)/ \
           (2 * np.pi * (target_distance * self.source_db['H_core'])) * self.mut_rho_db['Air'][eni]
 
