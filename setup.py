@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name='mmp_libraries',
-    version='1.3.0',
+    version='1.3.1',
     packages=setuptools.find_packages(),  #['mmp_libraries'], #, 'oct2pyMMP', 'shieldingMMP'],  # 
     license='MIT',
     description='Custom libraries and utilities for MMP',
