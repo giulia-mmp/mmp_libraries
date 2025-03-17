@@ -1,7 +1,7 @@
 import re
 import numpy as np
 import pandas as pd
-
+import periodictable
 
 # FNC: Function which reads _det.m and _dep.m Serpent files
 def read_sss_detdep(*filenames):
@@ -115,7 +115,7 @@ def read_sss_res(filename, *search_strings):
 
 
 # FNC: Function which reads .out Serpent files
-def read_out_file(fn):
+def read_sss_out(fn):
     """
     fn: path of file to be read
     """
@@ -164,4 +164,73 @@ def read_sss_mvol(fn):
             material_volume = float(split_line[2])
             output[material_name] = material_volume
     return output
+
+
+# FNC: Function which reads .bumat Serpent files
+def read_sss_bumat(filename, zai_mode=True):
+    data_out = {}
+
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+
+    for ii, line in enumerate(lines):
+        if line.startswith('mat'):
+            words = line.split()
+            mat_key = words[1]
+            dens = float(words[2])
+            if 'vol' in words:
+                vol = float(words[words.index('vol') + 1])
+                data_out[mat_key] = {"dens": dens, 'vol': vol}
+            else:
+                data_out[mat_key] = {"dens": dens}
+
+            isotope_lines = {}
+            iso_ii = ii + 1
+            isotope_line = lines[iso_ii]
+            meta_values = {}
+            while not isotope_line.startswith('mat') and iso_ii < len(lines):
+                isotope_words = isotope_line.split()
+                if zai_mode:
+                    if '.' in isotope_words[0]:
+                        isotope_key = isotope_words[0].split('.')[0] + '0'
+                    else:
+                        isotope_key = isotope_words[0]
+                    isotope_value = float(isotope_words[1])
+                    isotope_lines[isotope_key] = isotope_value
+                else:
+                    if '.' in isotope_words[0]:
+                        ZA = int(isotope_words[0].split('.')[0])
+                        Z = ZA // 1000
+                        A = ZA % 1000
+                        elem_sym = str(periodictable.elements[Z])
+                        isotope_key = elem_sym + str(A)
+                        isotope_value = float(isotope_words[1])
+                    else:
+                        ZAI = int(isotope_words[0].split('.')[0])
+                        Z = ZAI // 10000
+                        ZA = ZAI // 10
+                        A = (ZAI % 10000) // 10
+                        I = (ZAI % 10000) % 10
+                        elem_sym = str(periodictable.elements[Z])
+                        if I == 0:
+                            isotope_key = elem_sym + str(A)
+                            isotope_value = float(isotope_words[1])
+                        else:
+                            isotope_key = elem_sym + str(A) + 'm'
+                            if I == 1:
+                                meta_values[isotope_key] = float(isotope_words[1])
+                            else:
+                                meta_values[isotope_key] += float(isotope_words[1])
+                            isotope_value = np.nan
+
+                    isotope_lines[isotope_key] = isotope_value
+                    for meta in meta_values.keys():
+                        isotope_lines[meta] = meta_values[meta]
+
+                iso_ii += 1
+                if iso_ii < len(lines):
+                    isotope_line = lines[iso_ii]
+            data_out[mat_key]['comp'] = isotope_lines
+
+    return data_out
 
